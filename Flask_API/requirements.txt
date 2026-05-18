@@ -1,0 +1,10 @@
+flask>=2.3,<4.0
+flask-cors>=4.0
+flask-pymongo>=2.3
+flask-bcrypt>=1.0
+PyJWT>=2.8
+pymongo>=4.6
+pandas>=2.0
+networkx>=3.2
+torch>=2.0
+torch_geometric>=2.4

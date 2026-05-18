@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv310/
+.venv/
+*.egg-info/
+
+# Frontend
+Frontend/route-optimizer/node_modules/
+Frontend/route-optimizer/dist/
+Frontend/route-optimizer/.env.local
+
+# Local data / secrets
+startup_err.txt
+startup_out.txt
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+Untitled.ipynb
+
+# Docs / raw data (not needed in repo)
+Papers/
+Downloads/
+Codes/
+*.docx
+uk_logistics_dataset_*.csv

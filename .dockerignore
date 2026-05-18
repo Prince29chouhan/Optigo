@@ -1,0 +1,17 @@
+Frontend/
+venv310/
+__pycache__/
+Flask_API/__pycache__/
+*.pyc
+*.pyo
+.git/
+.gitignore
+Papers/
+Downloads/
+Codes/
+*.docx
+Untitled.ipynb
+uk_logistics_dataset_*.csv
+startup_err.txt
+startup_out.txt
+*.md
