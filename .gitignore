@@ -21,11 +21,9 @@ Thumbs.db
 
 # Jupyter
 .ipynb_checkpoints/
-Untitled.ipynb
 
-# Docs / raw data (not needed in repo)
+# Docs
 Papers/
 Downloads/
 Codes/
 *.docx
-uk_logistics_dataset_*.csv
