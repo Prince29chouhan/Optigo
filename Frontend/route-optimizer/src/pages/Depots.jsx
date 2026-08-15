@@ -1,330 +1,297 @@
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import {
-  FaWarehouse,
-  FaPlus,
-  FaTrash,
-  FaSearch,
-  FaCity
-} from "react-icons/fa";
-import Sidebar from "../components/Sidebar";
-import Topbar from "../components/Topbar";
-import Logo from "../assets/logo.png";
+  TbBuildingWarehouse, TbCloudDownload, TbEdit, TbMapPin, TbPlus, TbSearch, TbTrash,
+} from "react-icons/tb";
+import PageShell from "../components/PageShell";
+import {
+  Button, Card, Chip, Field, Modal, NumberInput, Select, Spinner, Table, TextInput,
+} from "../components/ui";
+import { addDepot, deleteDepot, getLocations, importDatasetDepots, updateDepot } from "../lib/api";
+import { useAuth } from "../context/AuthContext";
 
-const getToken = () => localStorage.getItem("token");
-const getUserRole = () => localStorage.getItem("userRole") || "driver";
+const LOCATION_TYPES = ["depot", "warehouse", "customer", "supplier", "fuel", "rest", "custom"];
 
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000";
+const emptyDepot = {
+  name: "", type: "depot", city: "", address: "", postcode: "",
+  lat: "", lon: "", capacity: "", service_minutes: 15,
+  contact_name: "", contact_phone: "", opening_time: "", closing_time: "", notes: "",
+};
 
 export default function Depots() {
   const navigate = useNavigate();
-  const [currentTab] = useState("depots");
-  const [depots, setDepots] = useState([]);
+  const { canManage } = useAuth();
+  const [locations, setLocations] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [showAdd, setShowAdd] = useState(false);
-  const [newDepot, setNewDepot] = useState({ name: "", city: "", lat: "", lon: "", capacity: "" });
-  const [dataLoaded, setDataLoaded] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState("");
+  const [showDataset, setShowDataset] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [saving, setSaving] = useState(false);
 
-  const userInitials = (localStorage.getItem("fullName") || "Admin User")
-    .split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
-  const isAdmin = getUserRole() === "admin";
-
-  useEffect(() => {
-    fetchDepots();
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await getLocations({ include_dataset: 1 });
+      setLocations(data.locations || []);
+    } catch (error) {
+      toast.error(error.message || "Could not load depots");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const fetchDepots = async () => {
-    setDataLoaded(false);
-    try {
-      const res = await fetch(`${API_BASE}/depots`, {
-        headers: { Authorization: `Bearer ${getToken()}` }
-      });
-      if (!res.ok) throw new Error("Could not fetch depots");
-      const data = await res.json();
-      setDepots(data.map(d => ({ ...d, id: d._id || d.id })));
-      setLastUpdated(new Date().toLocaleTimeString());
-    } catch {
-      setDepots([]);
-      toast.error("Failed to load depots.");
-    } finally {
-      setTimeout(() => setDataLoaded(true), 400);
-    }
-  };
+  useEffect(() => { load(); }, [load]);
 
-  const handleAddDepot = async () => {
-    if (!newDepot.name.trim() || !newDepot.city.trim()) {
-      toast.error("Name and city are required.");
+  const companyLocations = useMemo(() => locations.filter((l) => l.source === "company"), [locations]);
+  const datasetLocations = useMemo(() => locations.filter((l) => l.source === "dataset"), [locations]);
+
+  const visible = useMemo(() => {
+    const pool = showDataset ? locations : companyLocations;
+    const term = search.trim().toLowerCase();
+    if (!term) return pool;
+    return pool.filter((location) =>
+      [location.name, location.city, location.address, location.postcode]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(term))
+    );
+  }, [locations, companyLocations, showDataset, search]);
+
+  const handleSave = async () => {
+    if (!editing.name?.trim()) {
+      toast.error("A depot name is required.");
       return;
     }
-    setLoading(true);
+    if (editing.lat === "" || editing.lon === "") {
+      toast.error("Latitude and longitude are required — the planner needs coordinates.");
+      return;
+    }
+    setSaving(true);
     try {
-      const res = await fetch(`${API_BASE}/depots`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${getToken()}`
-        },
-        body: JSON.stringify({
-          ...newDepot,
-          lat: parseFloat(newDepot.lat) || 0,
-          lon: parseFloat(newDepot.lon) || 0,
-          capacity: parseInt(newDepot.capacity, 10) || 0,
-        })
-      });
-      if (res.ok) {
-        toast.success("Depot added.");
-        setNewDepot({ name: "", city: "", lat: "", lon: "", capacity: "" });
-        setShowAdd(false);
-        await fetchDepots();
+      const payload = {
+        ...editing,
+        lat: Number(editing.lat),
+        lon: Number(editing.lon),
+        capacity: Number(editing.capacity) || 0,
+        service_minutes: Number(editing.service_minutes) || 0,
+      };
+      delete payload.id;
+      delete payload._id;
+      delete payload.source;
+      delete payload.in_gnn_network;
+
+      if (editing.id) {
+        await updateDepot(editing.id, payload);
+        toast.success("Depot updated");
       } else {
-        const err = await res.json().catch(() => ({}));
-        toast.error(err?.error || "Failed to add depot.");
+        await addDepot(payload);
+        toast.success("Depot added — it is now selectable in the route planner");
       }
-    } catch {
-      toast.error("Network error — could not add depot.");
+      setEditing(null);
+      await load();
+    } catch (error) {
+      toast.error(error.message || "Could not save the depot");
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
-  const handleRemoveDepot = async (id) => {
-    if (!window.confirm("Delete this depot?")) return;
-    setLoading(true);
+  const handleDelete = async (depot) => {
+    if (!window.confirm(`Delete ${depot.name}?`)) return;
     try {
-      const res = await fetch(`${API_BASE}/depots/${id}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${getToken()}` }
-      });
-      if (res.ok) {
-        toast.success("Depot removed.");
-        await fetchDepots();
-      } else {
-        toast.error("Failed to delete depot.");
-      }
-    } catch {
-      toast.error("Network error — could not delete depot.");
-    } finally {
-      setLoading(false);
+      await deleteDepot(depot.id);
+      toast.success("Depot deleted");
+      await load();
+    } catch (error) {
+      toast.error(error.message || "Could not delete the depot");
     }
   };
 
-  const filtered = depots.filter(d =>
-    d.name.toLowerCase().includes(search.toLowerCase()) ||
-    d.city.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const topStats = [
-    {
-      icon: <FaWarehouse className="text-emerald-600" size={18} />,
-      label: "Total Depots",
-      value: depots.length
-    },
-    {
-      icon: <FaCity className="text-blue-500" size={18} />,
-      label: "Cities",
-      value: [...new Set(depots.map(d => d.city))].length
-    },
-    {
-      icon: <FaWarehouse className="text-emerald-500" size={18} />,
-      label: "Max Capacity",
-      value: depots.reduce((max, d) => Math.max(max, d.capacity ?? 0), 0) + " units"
+  const handleImport = async () => {
+    if (!window.confirm(`Copy all ${datasetLocations.length} trained-network locations into your own list?`)) return;
+    try {
+      const response = await importDatasetDepots();
+      toast.success(response.message);
+      await load();
+    } catch (error) {
+      toast.error(error.message || "Could not import depots");
     }
+  };
+
+  const stats = [
+    { icon: <TbBuildingWarehouse className="text-emerald-600" size={18} />, label: "My depots", value: companyLocations.length },
+    { icon: <TbMapPin className="text-blue-500" size={18} />, label: "Network locations", value: datasetLocations.length },
+    {
+      icon: <TbBuildingWarehouse className="text-amber-500" size={18} />, label: "Cities",
+      value: new Set(companyLocations.map((l) => l.city).filter(Boolean)).size,
+    },
   ];
 
   return (
-    <div className="flex flex-col h-screen font-sans select-none
-      bg-gradient-to-br from-emerald-100 via-emerald-50 to-white
-      [background-image:radial-gradient(circle_at_15%_15%,rgba(16,185,129,.20)_0%,transparent_55%),
-        radial-gradient(circle_at_85%_75%,rgba(5,150,105,.18)_0%,transparent_45%)]">
-
-      <Topbar
-        logoSrc={Logo}
-        appName="OptiGo"
-        stats={topStats}
-        showLiveIndicator={true}
-        userInitials={userInitials}
-        onHomeClick={() => navigate("/plan")}
-        onMapClick={() => navigate("/tracking")}
-        onProfileClick={() => navigate("/settings")}
-      />
-
-      <div className="flex flex-1 overflow-hidden relative">
-        <Sidebar currentTab={currentTab} />
-
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Title + Actions */}
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 px-8 pt-10 pb-4">
-            <div>
-              <h1 className="text-3xl font-bold text-emerald-800">Depots & Locations</h1>
-              <p className="text-gray-600 text-base">
-                {isAdmin
-                  ? "Manage all depots, hubs, and warehouse locations for your fleet."
-                  : "Browse available depots and their details."}
-              </p>
-            </div>
-            <div className="flex gap-2 mt-2 w-full md:w-auto">
+    <PageShell
+      title="Depots & locations"
+      subtitle="Every location here is immediately available when planning a route"
+      stats={stats}
+      actions={
+        canManage && (
+          <>
+            <Button variant="secondary" icon={<TbCloudDownload size={16} />} onClick={handleImport}>
+              Import network locations
+            </Button>
+            <Button icon={<TbPlus size={16} />} onClick={() => setEditing({ ...emptyDepot })}>Add depot</Button>
+          </>
+        )
+      }
+    >
+      <Card
+        title={`${visible.length} location${visible.length === 1 ? "" : "s"}`}
+        subtitle={showDataset
+          ? "Showing your depots and the locations the cost models were trained on"
+          : "Showing your company's depots"}
+        actions={
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <TbSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
               <input
-                type="text"
-                placeholder="Search by name/city..."
-                className="px-4 py-2 rounded-lg border border-emerald-200 text-base bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400 flex-1 md:w-auto"
                 value={search}
-                onChange={e => setSearch(e.target.value)}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search name, city, postcode"
+                className="pl-8 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
               />
-              <button className="p-2 rounded-lg border border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-100">
-                <FaSearch />
-              </button>
-              {isAdmin && (
-                <button
-                  onClick={() => setShowAdd(v => !v)}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-4 py-2 flex items-center gap-2 whitespace-nowrap"
-                  disabled={loading}
-                >
-                  <FaPlus /> Add Depot
-                </button>
-              )}
             </div>
+            <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer whitespace-nowrap">
+              <input type="checkbox" className="accent-emerald-600" checked={showDataset}
+                onChange={(event) => setShowDataset(event.target.checked)} />
+              show network depots
+            </label>
           </div>
-
-          {/* Stat Cards */}
-          <div className="w-full grid grid-cols-1 md:grid-cols-3 gap-6 px-8 mb-8">
-            {topStats.map((s, i) => (
-              <div key={i} className="rounded-2xl border bg-white/80 border-emerald-100 p-6 flex items-center gap-4 shadow">
-                <div className="flex-shrink-0 rounded-xl p-4 bg-emerald-50">{s.icon}</div>
-                <div>
-                  <div className="text-sm text-gray-500 font-medium uppercase">{s.label}</div>
-                  <div className="text-2xl font-bold text-emerald-800 mt-1">{s.value}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Add New Depot (Admin Only) */}
-          {isAdmin && showAdd && (
-            <div className="px-8 mb-4">
-              <div className="bg-white border border-emerald-200 rounded-2xl shadow-lg p-6 flex flex-col gap-3">
-                <div className="flex flex-wrap gap-3">
-                  <input
-                    className="border border-emerald-200 rounded-lg px-3 py-2 flex-1 min-w-[120px]"
-                    placeholder="Depot Name"
-                    value={newDepot.name}
-                    onChange={e => setNewDepot(v => ({ ...v, name: e.target.value }))}
-                  />
-                  <input
-                    className="border border-emerald-200 rounded-lg px-3 py-2 flex-1 min-w-[120px]"
-                    placeholder="City"
-                    value={newDepot.city}
-                    onChange={e => setNewDepot(v => ({ ...v, city: e.target.value }))}
-                  />
-                  <input
-                    className="border border-emerald-200 rounded-lg px-3 py-2 w-28"
-                    placeholder="Latitude"
-                    value={newDepot.lat}
-                    onChange={e => setNewDepot(v => ({ ...v, lat: e.target.value }))}
-                  />
-                  <input
-                    className="border border-emerald-200 rounded-lg px-3 py-2 w-28"
-                    placeholder="Longitude"
-                    value={newDepot.lon}
-                    onChange={e => setNewDepot(v => ({ ...v, lon: e.target.value }))}
-                  />
-                  <input
-                    className="border border-emerald-200 rounded-lg px-3 py-2 w-28"
-                    type="number"
-                    min={0}
-                    placeholder="Capacity"
-                    value={newDepot.capacity}
-                    onChange={e => setNewDepot(v => ({ ...v, capacity: e.target.value }))}
-                  />
-                </div>
-                <div className="flex gap-2 mt-2">
-                  <button
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-4 py-2 flex items-center gap-2"
-                    onClick={handleAddDepot}
-                    disabled={loading}
-                  >
-                    <FaPlus /> {loading ? "Adding..." : "Add"}
-                  </button>
-                  <button
-                    className="px-4 py-2 rounded-lg border text-gray-500 border-emerald-200 bg-white hover:bg-emerald-50"
-                    onClick={() => setShowAdd(false)}
-                    disabled={loading}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Depot Table */}
-          <div className="flex-1 overflow-y-auto px-8 pb-8">
-            <div className="bg-white/95 border border-emerald-100 rounded-2xl shadow p-0 overflow-x-auto">
-              <table className="min-w-full text-base">
-                <thead>
-                  <tr className="bg-emerald-50 text-emerald-800">
-                    <th className="p-4 text-left font-semibold">Depot</th>
-                    <th className="p-4 text-left font-semibold">City</th>
-                    <th className="p-4 text-left font-semibold">Lat</th>
-                    <th className="p-4 text-left font-semibold">Lon</th>
-                    <th className="p-4 text-left font-semibold">Capacity</th>
-                    {isAdmin && <th className="p-4 text-left font-semibold">Actions</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {dataLoaded ? (
-                    filtered.length ? (
-                      filtered.map(dep => (
-                        <tr key={dep.id} className="border-t hover:bg-emerald-50/60 transition">
-                          <td className="p-4 font-medium flex items-center gap-2">
-                            <FaWarehouse className="text-emerald-400" /> {dep.name}
-                          </td>
-                          <td className="p-4">{dep.city}</td>
-                          <td className="p-4">{dep.lat}</td>
-                          <td className="p-4">{dep.lon}</td>
-                          <td className="p-4">{dep.capacity}</td>
-                          {isAdmin && (
-                            <td className="p-4">
-                              <button
-                                className="p-2 rounded-lg bg-rose-100 text-rose-700 hover:bg-rose-200 transition"
-                                onClick={() => handleRemoveDepot(dep.id)}
-                                disabled={loading}
-                              >
-                                <FaTrash />
-                              </button>
-                            </td>
-                          )}
-                        </tr>
-                      ))
+        }
+      >
+        {loading ? (
+          <Spinner label="Loading depots…" />
+        ) : (
+          <Table
+            columns={["Name", "Type", "City", "Coordinates", "Capacity", "Service", "Source", canManage ? "Actions" : ""].filter(Boolean)}
+            rows={visible}
+            empty="No locations yet — add your first depot to start planning."
+            renderRow={(location) => (
+              <tr key={`${location.source}-${location.id}`} className="border-t border-gray-100 hover:bg-emerald-50/40">
+                <td className="p-3">
+                  <div className="font-medium text-gray-800">{location.name}</div>
+                  {location.address && <div className="text-[11px] text-gray-500">{location.address}</div>}
+                </td>
+                <td className="p-3"><Chip tone="slate">{location.type || "depot"}</Chip></td>
+                <td className="p-3 text-gray-600">{location.city || "—"}</td>
+                <td className="p-3 text-xs text-gray-600 whitespace-nowrap">
+                  {Number(location.lat).toFixed(4)}, {Number(location.lon).toFixed(4)}
+                </td>
+                <td className="p-3">{location.capacity || "—"}</td>
+                <td className="p-3">{location.service_minutes != null ? `${location.service_minutes} min` : "—"}</td>
+                <td className="p-3">
+                  {location.source === "dataset"
+                    ? <Chip tone="blue">Trained network</Chip>
+                    : <Chip tone="emerald">My depot</Chip>}
+                </td>
+                {canManage && (
+                  <td className="p-3">
+                    {location.source === "company" ? (
+                      <div className="flex gap-1">
+                        <button className="p-1.5 rounded-lg text-gray-500 hover:bg-emerald-100 hover:text-emerald-700"
+                          title="Edit" onClick={() => setEditing({ ...emptyDepot, ...location })}>
+                          <TbEdit size={16} />
+                        </button>
+                        <button className="p-1.5 rounded-lg text-gray-500 hover:bg-rose-100 hover:text-rose-700"
+                          title="Delete" onClick={() => handleDelete(location)}>
+                          <TbTrash size={16} />
+                        </button>
+                      </div>
                     ) : (
-                      <tr>
-                        <td colSpan={isAdmin ? 6 : 5} className="p-6 text-center text-gray-500">
-                          No depots found.
-                        </td>
-                      </tr>
-                    )
-                  ) : (
-                    <tr>
-                      <td colSpan={isAdmin ? 6 : 5} className="p-6 text-center text-gray-400">
-                        Loading depots...
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                      <span className="text-[11px] text-gray-400">read-only</span>
+                    )}
+                  </td>
+                )}
+              </tr>
+            )}
+          />
+        )}
+      </Card>
 
-          {/* Status Bar */}
-          <div className="bg-emerald-50/80 h-10 flex items-center px-8 border-t border-emerald-100 text-xs text-gray-600">
-            {dataLoaded
-              ? `${filtered.length} depot${filtered.length !== 1 ? "s" : ""} shown${lastUpdated ? ` • Last updated: ${lastUpdated}` : ""}`
-              : "Loading..."}
-          </div>
-        </div>
+      <div className="mt-4">
+        <Button variant="ghost" onClick={() => navigate("/plan")}>Go to the route planner →</Button>
       </div>
-    </div>
+
+      <Modal
+        open={Boolean(editing)}
+        title={editing?.id ? `Edit ${editing.name}` : "Add depot or location"}
+        onClose={() => setEditing(null)}
+        width="max-w-2xl"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
+            <Button onClick={handleSave} loading={saving}>Save location</Button>
+          </>
+        }
+      >
+        {editing && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Field label="Name *">
+              <TextInput value={editing.name} placeholder="Leeds NDC"
+                onChange={(value) => setEditing({ ...editing, name: value })} />
+            </Field>
+            <Field label="Type">
+              <Select value={editing.type} onChange={(value) => setEditing({ ...editing, type: value })}>
+                {LOCATION_TYPES.map((type) => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Latitude *" hint="e.g. 53.8008">
+              <NumberInput step="0.0001" value={editing.lat}
+                onChange={(value) => setEditing({ ...editing, lat: value })} />
+            </Field>
+            <Field label="Longitude *" hint="e.g. -1.5491">
+              <NumberInput step="0.0001" value={editing.lon}
+                onChange={(value) => setEditing({ ...editing, lon: value })} />
+            </Field>
+            <Field label="City">
+              <TextInput value={editing.city} onChange={(value) => setEditing({ ...editing, city: value })} />
+            </Field>
+            <Field label="Postcode">
+              <TextInput value={editing.postcode} onChange={(value) => setEditing({ ...editing, postcode: value })} />
+            </Field>
+            <Field label="Address" className="md:col-span-2">
+              <TextInput value={editing.address} onChange={(value) => setEditing({ ...editing, address: value })} />
+            </Field>
+            <Field label="Capacity (units)">
+              <NumberInput min={0} value={editing.capacity}
+                onChange={(value) => setEditing({ ...editing, capacity: value })} />
+            </Field>
+            <Field label="Default service time (min)" hint="Used when planning stops here">
+              <NumberInput min={0} max={600} value={editing.service_minutes}
+                onChange={(value) => setEditing({ ...editing, service_minutes: value })} />
+            </Field>
+            <Field label="Opens">
+              <TextInput type="time" value={editing.opening_time}
+                onChange={(value) => setEditing({ ...editing, opening_time: value })} />
+            </Field>
+            <Field label="Closes">
+              <TextInput type="time" value={editing.closing_time}
+                onChange={(value) => setEditing({ ...editing, closing_time: value })} />
+            </Field>
+            <Field label="Contact name">
+              <TextInput value={editing.contact_name}
+                onChange={(value) => setEditing({ ...editing, contact_name: value })} />
+            </Field>
+            <Field label="Contact phone">
+              <TextInput value={editing.contact_phone}
+                onChange={(value) => setEditing({ ...editing, contact_phone: value })} />
+            </Field>
+            <Field label="Notes" className="md:col-span-2">
+              <TextInput value={editing.notes} onChange={(value) => setEditing({ ...editing, notes: value })} />
+            </Field>
+          </div>
+        )}
+      </Modal>
+    </PageShell>
   );
 }

@@ -1,0 +1,78 @@
+{
+  "source_csv": "uk_logistics_dataset_5000_routes_20250710_124423.csv",
+  "mode": "allocate",
+  "node_count": 68,
+  "edge_count": 1706,
+  "objectives": [
+    "cheapest",
+    "fastest",
+    "greenest"
+  ],
+  "node_features": [
+    "lat",
+    "lon",
+    "out_degree",
+    "in_degree",
+    "log_traversals",
+    "mean_speed_kmh",
+    "mean_traffic_delay_min",
+    "mean_weather_delay_min",
+    "mean_load_factor",
+    "share_peak_season",
+    "share_weekend",
+    "is_waypoint_only"
+  ],
+  "edge_features": [
+    "segment_km",
+    "allocated_km",
+    "delta_lat",
+    "delta_lon",
+    "src_lat",
+    "src_lon",
+    "dst_lat",
+    "dst_lon",
+    "log_traversals",
+    "src_out_degree",
+    "dst_in_degree",
+    "mean_avg_speed_kmh",
+    "mean_traffic_delay_minutes",
+    "mean_weather_delay_minutes",
+    "mean_vehicle_max_weight_kg",
+    "mean_vehicle_length_m",
+    "mean_vehicle_width_m",
+    "mean_vehicle_height_m",
+    "mean_cargo_volume_m3",
+    "mean_cargo_weight_kg",
+    "mean_load_factor",
+    "mean_breaks_required",
+    "share_peak_season",
+    "share_weekend",
+    "share_compliant",
+    "share_adverse_weather"
+  ],
+  "context_columns": [
+    "avg_speed_kmh",
+    "traffic_delay_minutes",
+    "weather_delay_minutes",
+    "vehicle_max_weight_kg",
+    "vehicle_length_m",
+    "vehicle_width_m",
+    "vehicle_height_m",
+    "cargo_volume_m3",
+    "cargo_weight_kg",
+    "load_factor",
+    "breaks_required"
+  ],
+  "dropped_context_columns": [],
+  "targets": {
+    "cheapest": "target_cheapest",
+    "fastest": "target_fastest",
+    "greenest": "target_greenest"
+  },
+  "target_units": {
+    "cheapest": "GBP",
+    "fastest": "hours",
+    "greenest": "kg CO2"
+  },
+  "allocation": "journey totals split across legs by great-circle distance share, then averaged over traversals"
+}

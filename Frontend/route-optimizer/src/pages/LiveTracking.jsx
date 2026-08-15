@@ -152,7 +152,6 @@ const truckIcon = new L.Icon({
 /* ── Main component ── */
 const LiveTracking = () => {
   const [simulating, setSimulating]           = useState(false);
-  const [currentTab, setCurrentTab]           = useState("tracking");
   const [mobileDetailsOpen, setMobileDetailsOpen] = useState(false);
   const navigate     = useNavigate();
   const userInitials = getUserInitials();
@@ -172,7 +171,7 @@ const LiveTracking = () => {
           onMapClick={() => navigate("/plan")}
           onProfileClick={() => navigate("/settings")} />
         <div className="flex flex-1 overflow-hidden">
-          <Sidebar currentTab={currentTab} onTabChange={setCurrentTab} />
+          <Sidebar />
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center p-8">
               <FaExclamationTriangle size={48} className="mx-auto mb-4 text-amber-400" />
@@ -228,7 +227,7 @@ const LiveTracking = () => {
       />
 
       <div className="flex flex-1 min-h-0 overflow-hidden relative">
-        <Sidebar currentTab={currentTab} onTabChange={setCurrentTab} />
+        <Sidebar />
 
         <div className="flex flex-1 min-h-0 flex-col md:flex-row overflow-hidden relative">
 

@@ -11,6 +11,9 @@ Frontend/route-optimizer/node_modules/
 Frontend/route-optimizer/dist/
 Frontend/route-optimizer/.env.local
 
+# Runtime caches (regenerated on demand)
+Flask_API/gnn_artifacts/adhoc_geometry.json
+
 # Local data / secrets
 startup_err.txt
 startup_out.txt

@@ -1,5 +1,4 @@
 // Topbar.jsx - Reusable topbar component with logo, stats, and user controls
-import { useState } from "react";
 import { 
   FaClock, 
   FaGasPump, 

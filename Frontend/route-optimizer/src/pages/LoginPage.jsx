@@ -7,7 +7,7 @@ import {
   Route, MapPin, Clock, Globe, Leaf, Recycle
 } from "lucide-react";
 
-const API_URL = import.meta.env.VITE_API_BASE || "http://localhost:5000";
+import { login as loginRequest, register as registerRequest } from "../lib/api";
 
 const LoginPage = () => {
   const [email, setEmail] = useState(() => localStorage.getItem("rememberedEmail") || "");
@@ -25,64 +25,54 @@ const LoginPage = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isLoading) return;
     setIsLoading(true);
     try {
       if (tab === "login") {
-        // LOGIN
-        const res = await fetch(`${API_URL}/login`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password }),
-        });
-        const data = await res.json();
-        if (res.ok && data.token) {
-          localStorage.setItem("token", data.token);
-          localStorage.setItem("userRole", data.role);
-          localStorage.setItem("fullName", data.fullName || "");
-          localStorage.setItem("companyName", data.companyName || "");
-          localStorage.setItem("email", data.email || "");
-          if (rememberMe) {
-            // Persistent login — stays logged in after browser close
-            localStorage.setItem("rememberedEmail", email);
-            localStorage.removeItem("session_only");
-            sessionStorage.removeItem("session_active");
-          } else {
-            // Session-only login — closing the browser logs the user out
-            localStorage.removeItem("rememberedEmail");
-            localStorage.setItem("session_only", "1");
-            sessionStorage.setItem("session_active", "1");
-          }
-          refreshUser();
-          toast.success("Login successful! Redirecting...");
-          setTimeout(() => navigate("/plan"), 1200);
+        const data = await loginRequest(email.trim(), password);
+        localStorage.setItem("token", data.token);
+        localStorage.setItem("userRole", data.role);
+        localStorage.setItem("userId", data.userId || "");
+        localStorage.setItem("fullName", data.fullName || "");
+        localStorage.setItem("companyName", data.companyName || "");
+        localStorage.setItem("email", data.email || "");
+        if (rememberMe) {
+          // Persistent login — stays signed in after the browser closes.
+          localStorage.setItem("rememberedEmail", email.trim());
+          localStorage.removeItem("session_only");
+          sessionStorage.removeItem("session_active");
         } else {
-          toast.error(data.message || "Login failed.");
+          // Session-only login — closing the browser signs the user out.
+          localStorage.removeItem("rememberedEmail");
+          localStorage.setItem("session_only", "1");
+          sessionStorage.setItem("session_active", "1");
         }
+        refreshUser();
+        toast.success("Welcome back — loading your planner…");
+        navigate("/plan", { replace: true });
       } else {
-        // SIGNUP
-        const res = await fetch(`${API_URL}/register`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email,
-            password,
-            fullName,
-            companyName,
-            userType,
-          }),
-        });
-        const data = await res.json();
-        if (res.ok) {
-          toast.success("Signup successful! Please login.");
-          setTab("login");
-        } else {
-          toast.error(data.message || "Signup failed.");
+        if (!fullName.trim() || !companyName.trim()) {
+          toast.error("Full name and company name are required.");
+          return;
         }
+        await registerRequest({
+          email: email.trim(),
+          password,
+          fullName: fullName.trim(),
+          companyName: companyName.trim(),
+          userType,
+        });
+        toast.success("Account created — please sign in.");
+        setTab("login");
+        setPassword("");
       }
-    } catch {
-      toast.error("Server error. Please try again later.");
+    } catch (error) {
+      // The API returns a specific message for every failure (bad credentials,
+      // duplicate email, weak password, database unavailable).
+      toast.error(error.message || "Something went wrong. Please try again.");
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   return (
