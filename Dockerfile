@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # newer torch cannot be relied on to load in an older one.
 RUN pip install --no-cache-dir \
     torch==2.13.0+cpu \
-    --index-url https://download.pytorch.org/whl/cpu
+    --extra-index-url https://download.pytorch.org/whl/cpu
 
 # PyTorch Geometric supplies GINEConv, used by the edge-cost encoder.
 RUN pip install --no-cache-dir torch_geometric==2.8.0
